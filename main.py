@@ -28,60 +28,6 @@ def save_config(hotkeys):
 def get_image_path(filename):
     return os.path.join(IMAGE_DIR, filename)
 
-class ImageDetector:
-    def __init__(self, update_message_callback):
-        self.running = False
-        self.thread = None
-        self.template_path = None
-        self.template = None
-        self.update_message = update_message_callback
-    
-    def set_template(self, template_path):
-        self.template_path = template_path
-        self.template = cv2.imread(self.template_path, cv2.IMREAD_GRAYSCALE)
-    
-    def start(self):
-        if not self.template_path:
-            return
-        self.running = True
-        self.update_message("実行中")
-        self.thread = threading.Thread(target=self.detect_image, daemon=True)
-        self.thread.start()
-    
-    def stop(self):
-        self.running = False
-        self.update_message("停止中")
-        if self.thread and self.thread.is_alive():
-            self.thread.join()
-        self.thread = None
-
-    def detect_image(self):
-        if self.template is None:
-            return
-
-        sift = cv2.SIFT_create()
-        kp_template, des_template = sift.detectAndCompute(self.template, None)
-        flann = cv2.FlannBasedMatcher(dict(algorithm=1, trees=5), dict(checks=50))
-
-        while self.running:
-            time.sleep(0.1)
-            screenshot = pyautogui.screenshot()
-            img_gray = cv2.cvtColor(np.array(screenshot), cv2.COLOR_BGR2GRAY)
-            kp_screen, des_screen = sift.detectAndCompute(img_gray, None)
-
-            if des_screen is None or len(des_screen) < 10:
-                time.sleep(0.1)
-                continue
-
-            matches = flann.knnMatch(des_template, des_screen, k=2)
-            good_matches = [m for m, n in matches if m.distance < 0.6 * n.distance]
-
-            if len(good_matches) >= 10:
-                x, y = np.mean([kp_screen[m.trainIdx].pt for m in good_matches], axis=0)
-                pyautogui.moveTo(int(x), int(y), duration=0.1)
-                pyautogui.click()
-            
-
 class ClickApp:
     def __init__(self, root):
         self.root = root
@@ -167,6 +113,60 @@ class ClickApp:
     def on_closing(self):
         self.detector.stop()
         self.root.destroy()
+        
+class ImageDetector:
+    def __init__(self, update_message_callback):
+        self.running = False
+        self.thread = None
+        self.template_path = None
+        self.template = None
+        self.update_message = update_message_callback
+    
+    def set_template(self, template_path):
+        self.template_path = template_path
+        self.template = cv2.imread(self.template_path, cv2.IMREAD_GRAYSCALE)
+    
+    def start(self):
+        if not self.template_path:
+            return
+        self.running = True
+        self.update_message("実行中")
+        self.thread = threading.Thread(target=self.detect_image, daemon=True)
+        self.thread.start()
+    
+    def stop(self):
+        self.running = False
+        self.update_message("停止中")
+        if self.thread and self.thread.is_alive():
+            self.thread.join()
+        self.thread = None
+
+    def detect_image(self):
+        if self.template is None:
+            return
+
+        sift = cv2.SIFT_create()
+        kp_template, des_template = sift.detectAndCompute(self.template, None)
+        flann = cv2.FlannBasedMatcher(dict(algorithm=1, trees=5), dict(checks=50))
+
+        while self.running:
+            time.sleep(0.1)
+            screenshot = pyautogui.screenshot()
+            img_gray = cv2.cvtColor(np.array(screenshot), cv2.COLOR_BGR2GRAY)
+            kp_screen, des_screen = sift.detectAndCompute(img_gray, None)
+
+            if des_screen is None or len(des_screen) < 10:
+                time.sleep(0.1)
+                continue
+
+            matches = flann.knnMatch(des_template, des_screen, k=2)
+            good_matches = [m for m, n in matches if m.distance < 0.6 * n.distance]
+
+            if len(good_matches) >= 10:
+                x, y = np.mean([kp_screen[m.trainIdx].pt for m in good_matches], axis=0)
+                pyautogui.moveTo(int(x), int(y), duration=0.1)
+                pyautogui.click()
+            
 
 if __name__ == "__main__":
     root = tk.Tk()
