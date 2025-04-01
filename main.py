@@ -42,6 +42,7 @@ class ClickApp:
         self.root.title("Auto Clicker")
         self.hotkeys = load_config()
         self.detector = None
+        self.message_queue = queue.Queue()
 
         self.label = tk.Label(root, text="クリック対象画像を選択してください")
         self.label.pack(pady=10)
@@ -67,6 +68,8 @@ class ClickApp:
 
         self.register_hotkeys()
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
+
+        self.update_message_thread()
 
     def setup_hotkey_ui(self, label_text, key):
         frame = tk.Frame(self.root)
@@ -124,8 +127,23 @@ class ClickApp:
     def select_template(self, event=None):
         template_path = get_image_path(self.template_var.get())
         template = cv2.imread(template_path, cv2.IMREAD_GRAYSCALE)
-        self.detector = ImageDetector(template, self.update_message)
+        self.detector = ImageDetector(
+            template, self.message_queue, self.handle_detection
+        )
         self.update_message("startキーで実行、stopキーで終了")
+
+    def handle_detection(self, x, y):
+        pyautogui.moveTo(x, y, duration=0.1)
+        pyautogui.click()
+
+    def update_message_thread(self):
+        def update():
+            while True:
+                message = self.message_queue.get()
+                if message:
+                    self.update_message(message)
+
+        threading.Thread(target=update, daemon=True).start()
 
     def update_message(self, message):
         self.message_label.config(text=message)
@@ -136,23 +154,24 @@ class ClickApp:
 
 
 class ImageDetector:
-    def __init__(self, template, update_message_callback):
+    def __init__(self, template, message_queue, on_detect_callback):
         self.running = False
         self.thread = None
         self.template = template
-        self.update_message = update_message_callback
+        self.message_queue = message_queue
+        self.on_detect = on_detect_callback
 
     def start(self):
         if self.template is None:
             return
         self.running = True
-        self.update_message("実行中")
+        self.message_queue.put(DetectorState.RUNNING.value)
         self.thread = threading.Thread(target=self.detect_image, daemon=True)
         self.thread.start()
 
     def stop(self):
         self.running = False
-        self.update_message("停止中")
+        self.message_queue.put(DetectorState.STOPPED.value)
         if self.thread and self.thread.is_alive():
             self.thread.join()
         self.thread = None
@@ -179,8 +198,12 @@ class ImageDetector:
 
             if len(good_matches) >= 10:
                 x, y = np.mean([kp_screen[m.trainIdx].pt for m in good_matches], axis=0)
-                pyautogui.moveTo(int(x), int(y), duration=0.1)
-                pyautogui.click()
+                self.on_detect(int(x), int(y))
+
+
+class DetectorState(Enum):
+    STOPPED = "停止中"
+    RUNNING = "実行中"
 
 
 if __name__ == "__main__":
