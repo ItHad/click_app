@@ -1,4 +1,4 @@
 .venv
+.vscode
 images
 config.json
-test.py
