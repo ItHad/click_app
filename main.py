@@ -11,6 +11,7 @@ from enum import Enum
 import cv2
 import pyautogui
 import keyboard
+import shutil
 
 
 CONFIG_FILE = "config.json"
@@ -116,8 +117,9 @@ class ClickApp:
     def add_image(self):
         file_path = filedialog.askopenfilename(filetypes=[("PNG images", "*.png")])
         if file_path:
-            os.rename(file_path, get_image_path(os.path.basename(file_path)))
+            shutil.copy(file_path, get_image_path(os.path.basename(file_path)))
             self.update_image_list()
+            self.update_message(f"{os.path.basename(file_path)} を追加しました")
 
     def delete_image(self):
         if self.template_var.get():
