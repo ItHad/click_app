@@ -157,7 +157,8 @@ class ClickApp:
         self.message_label.config(text=message)
 
     def on_closing(self):
-        self.detector.stop()
+        if self.detector:
+            self.detector.stop()
         self.root.destroy()
 
 
