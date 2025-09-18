@@ -127,9 +127,17 @@ class ClickApp:
     def select_template(self, event=None):
         template_path = get_image_path(self.template_var.get())
         template = cv2.imread(template_path, cv2.IMREAD_GRAYSCALE)
+        if template is None:
+            self.update_message(f"エラー: {self.template_var.get()}を読み込めません")
+            return
+
+        if self.detector and self.detector.running:
+            self.detector.stop()
+
         self.detector = ImageDetector(
             template, self.message_queue, self.handle_detection
         )
+        self.register_hotkeys()
         self.update_message("startキーで実行、stopキーで終了")
 
     def handle_detection(self, x, y):
