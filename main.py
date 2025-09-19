@@ -12,8 +12,33 @@ import pyautogui
 import keyboard
 import shutil
 
+
 CONFIG_FILE = "config.json"
 IMAGE_DIR = "images"
+
+# UI設定
+PAD_LARGE = 10
+PAD_MEDIUM = 5
+PAD_SMALL = 2
+HOTKEY_ENTRY_WIDTH = 10
+
+# 処理インターバル設定
+SCAN_INTERVAL_SECONDS = 0.1
+POST_CLICK_DELAY_SECONDS = 0.5
+MESSAGE_QUEUE_TIMEOUT_SECONDS = 1.0
+
+# 画像検出(SIFT/FLANN)パラメータ設定
+KNN_MATCH_K = 2
+LOWE_RATIO_THRESHOLD = 0.7
+MIN_GOOD_MATCHES = 10
+MIN_KEYPOINTS_ON_SCREEN = 10
+MIN_DESCRIPTORS_FOR_MATCH = 2
+
+# FLANNのパラメータ
+FLANN_INDEX_KDTREE = 1
+FLANN_INDEX_PARAMS = dict(algorithm=FLANN_INDEX_KDTREE, trees=5)
+FLANN_SEARCH_PARAMS = dict(checks=50)
+
 
 if not os.path.exists(IMAGE_DIR):
     os.makedirs(IMAGE_DIR)
@@ -53,7 +78,7 @@ class ClickApp:
 
     def setup_ui(self):
         list_frame = tk.Frame(self.root)
-        list_frame.pack(pady=10, padx=10, fill=tk.X)
+        list_frame.pack(pady=PAD_LARGE, padx=PAD_LARGE, fill=tk.X)
 
         available_frame = tk.Frame(list_frame)
         tk.Label(available_frame, text="利用可能な画像").pack()
@@ -64,11 +89,13 @@ class ClickApp:
         available_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
         button_frame = tk.Frame(list_frame)
-        tk.Button(button_frame, text="→", command=self.add_to_selection).pack(pady=5)
-        tk.Button(button_frame, text="←", command=self.remove_from_selection).pack(
-            pady=5
+        tk.Button(button_frame, text="→", command=self.add_to_selection).pack(
+            pady=PAD_MEDIUM
         )
-        button_frame.pack(side=tk.LEFT, padx=10)
+        tk.Button(button_frame, text="←", command=self.remove_from_selection).pack(
+            pady=PAD_MEDIUM
+        )
+        button_frame.pack(side=tk.LEFT, padx=PAD_LARGE)
 
         selected_frame = tk.Frame(list_frame)
         tk.Label(selected_frame, text="クリック対象 (優先度順)").pack()
@@ -79,29 +106,29 @@ class ClickApp:
         selected_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
         image_manage_frame = tk.Frame(self.root)
-        image_manage_frame.pack(pady=5)
+        image_manage_frame.pack(pady=PAD_MEDIUM)
         tk.Button(image_manage_frame, text="画像を追加", command=self.add_image).pack(
-            side=tk.LEFT, padx=5
+            side=tk.LEFT, padx=PAD_MEDIUM
         )
         tk.Button(
             image_manage_frame, text="画像を削除", command=self.delete_image
-        ).pack(side=tk.LEFT, padx=5)
+        ).pack(side=tk.LEFT, padx=PAD_MEDIUM)
 
         self.message_label = tk.Label(
             self.root, text="ホットキーで操作を開始/停止します"
         )
-        self.message_label.pack(pady=5)
+        self.message_label.pack(pady=PAD_MEDIUM)
         self.setup_hotkey_ui("startキー", "start")
         self.setup_hotkey_ui("stopキー", "stop")
 
     def setup_hotkey_ui(self, label_text, key):
         frame = tk.Frame(self.root)
-        frame.pack(pady=2)
+        frame.pack(pady=PAD_SMALL)
         label = tk.Label(frame, text=f"{label_text}: {self.hotkeys[key]}")
         label.pack(side=tk.LEFT)
         self.hotkey_labels[key] = label
-        entry = tk.Entry(frame, width=10)
-        entry.pack(side=tk.LEFT, padx=5)
+        entry = tk.Entry(frame, width=HOTKEY_ENTRY_WIDTH)
+        entry.pack(side=tk.LEFT, padx=PAD_MEDIUM)
         self.hotkey_entries[key] = entry
         tk.Button(frame, text="設定", command=lambda: self.set_hotkey(key)).pack(
             side=tk.LEFT
@@ -233,13 +260,15 @@ class ClickApp:
     def handle_detection(self, x, y):
         pyautogui.moveTo(x, y, duration=0.1)
         pyautogui.click()
-        time.sleep(0.1)
+        time.sleep(POST_CLICK_DELAY_SECONDS)
 
     def update_message_thread(self):
         def update():
             while True:
                 try:
-                    message = self.message_queue.get(timeout=1)
+                    message = self.message_queue.get(
+                        timeout=MESSAGE_QUEUE_TIMEOUT_SECONDS
+                    )
                     if self.root.winfo_exists():
                         self.update_message(message)
                 except queue.Empty:
@@ -289,7 +318,7 @@ class ImageDetector:
     def detect_images(self):
         try:
             sift = cv2.SIFT_create()
-            flann = cv2.FlannBasedMatcher(dict(algorithm=1, trees=5), dict(checks=50))
+            flann = cv2.FlannBasedMatcher(FLANN_INDEX_PARAMS, FLANN_SEARCH_PARAMS)
 
             prepared_templates = []
             for tpl in self.templates:
@@ -314,28 +343,31 @@ class ImageDetector:
             return
 
         while self.running:
-            time.sleep(0.1)
+            time.sleep(SCAN_INTERVAL_SECONDS)
             screenshot = pyautogui.screenshot()
             img_gray = cv2.cvtColor(np.array(screenshot), cv2.COLOR_BGR2GRAY)
             kp_screen, des_screen = sift.detectAndCompute(img_gray, None)
 
-            if des_screen is None or len(kp_screen) < 10:
+            if des_screen is None or len(kp_screen) < MIN_KEYPOINTS_ON_SCREEN:
                 continue
 
             des_screen = des_screen.astype(np.float32)
 
             for tpl_data in prepared_templates:
-                if len(tpl_data["des"]) < 2 or len(des_screen) < 2:
+                if (
+                    len(tpl_data["des"]) < MIN_DESCRIPTORS_FOR_MATCH
+                    or len(des_screen) < MIN_DESCRIPTORS_FOR_MATCH
+                ):
                     continue
 
-                matches = flann.knnMatch(tpl_data["des"], des_screen, k=2)
+                matches = flann.knnMatch(tpl_data["des"], des_screen, k=KNN_MATCH_K)
 
                 good_matches = []
-                for m, n in (match for match in matches if len(match) == 2):
-                    if m.distance < 0.7 * n.distance:
+                for m, n in (match for match in matches if len(match) == KNN_MATCH_K):
+                    if m.distance < LOWE_RATIO_THRESHOLD * n.distance:
                         good_matches.append(m)
 
-                if len(good_matches) >= 10:
+                if len(good_matches) >= MIN_GOOD_MATCHES:
                     x, y = np.mean(
                         [kp_screen[m.trainIdx].pt for m in good_matches], axis=0
                     )
