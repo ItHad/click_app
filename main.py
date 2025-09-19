@@ -11,6 +11,9 @@ import cv2
 import pyautogui
 import keyboard
 import shutil
+import random
+from collections import Counter
+from sklearn.cluster import DBSCAN
 
 
 CONFIG_FILE = "config.json"
@@ -22,9 +25,9 @@ PAD_MEDIUM = 5
 PAD_SMALL = 2
 HOTKEY_ENTRY_WIDTH = 10
 
-# 処理インターバル設定
+# 処理インターバル設定 (秒)
 SCAN_INTERVAL_SECONDS = 0.1
-POST_CLICK_DELAY_SECONDS = 0.5
+POST_CLICK_DELAY_SECONDS = 0.1
 MESSAGE_QUEUE_TIMEOUT_SECONDS = 1.0
 
 # 画像検出(SIFT/FLANN)パラメータ設定
@@ -324,7 +327,10 @@ class ImageDetector:
             for tpl in self.templates:
                 kp, des = sift.detectAndCompute(tpl, None)
                 if des is not None and len(kp) > 0:
-                    prepared_templates.append({"kp": kp, "des": des.astype(np.float32)})
+                    h, w = tpl.shape[:2]
+                    prepared_templates.append(
+                        {"kp": kp, "des": des.astype(np.float32), "h": h, "w": w}
+                    )
                 else:
                     self.message_queue.put(
                         "警告: 特徴点を検出できない画像がありました。"
@@ -368,9 +374,31 @@ class ImageDetector:
                         good_matches.append(m)
 
                 if len(good_matches) >= MIN_GOOD_MATCHES:
-                    x, y = np.mean(
-                        [kp_screen[m.trainIdx].pt for m in good_matches], axis=0
+                    match_points = np.float32(
+                        [kp_screen[m.trainIdx].pt for m in good_matches]
                     )
+
+                    tpl_h, tpl_w = tpl_data["h"], tpl_data["w"]
+                    eps = np.sqrt(tpl_h**2 + tpl_w**2)
+
+                    clusters = DBSCAN(eps=eps, min_samples=MIN_GOOD_MATCHES).fit(
+                        match_points
+                    )
+                    labels = clusters.labels_
+
+                    valid_clusters = [label for label in labels if label != -1]
+                    if not valid_clusters:
+                        continue
+
+                    grouped_points = {label: [] for label in set(valid_clusters)}
+                    for i, label in enumerate(labels):
+                        if label != -1:
+                            grouped_points[label].append(match_points[i])
+
+                    random_cluster_label = random.choice(list(grouped_points.keys()))
+                    chosen_cluster_points = grouped_points[random_cluster_label]
+
+                    x, y = np.mean(chosen_cluster_points, axis=0)
                     self.on_detect(int(x), int(y))
                     break
 
