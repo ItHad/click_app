@@ -5,14 +5,13 @@ import time
 import queue
 import numpy as np
 import tkinter as tk
-from tkinter import ttk, filedialog
+from tkinter import filedialog
 from enum import Enum
 import cv2
 import pyautogui
 import keyboard
 import shutil
 import random
-from collections import Counter
 from sklearn.cluster import DBSCAN
 
 
