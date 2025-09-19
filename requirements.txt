@@ -2,3 +2,4 @@ opencv-python ~= 4.11
 pyautogui == 0.9.54
 pillow ~= 11.1
 keyboard == 0.13.5
+scikit-learn
