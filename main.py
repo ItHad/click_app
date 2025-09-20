@@ -257,12 +257,16 @@ class ClickApp:
             self.preview_window = tk.Toplevel(self.root)
             self.preview_window.overrideredirect(True)
 
-            x = self.root.winfo_x() + self.root.winfo_width() + 10
-            y = self.root.winfo_y() + PAD_LARGE
+            x = event.x_root + 20
+            y = event.y_root - 20
             self.preview_window.geometry(f"+{x}+{y}")
 
             photo = ImageTk.PhotoImage(img)
-            label = tk.Label(self.preview_window, image=photo)
+
+            frame = tk.Frame(self.preview_window, relief="solid", borderwidth=1)
+            frame.pack()
+
+            label = tk.Label(frame, image=photo)
             label.image = photo
             label.pack()
         except Exception:
