@@ -13,6 +13,7 @@ import keyboard
 import shutil
 import random
 from sklearn.cluster import DBSCAN
+from PIL import Image, ImageTk
 
 
 CONFIG_FILE = "config.json"
@@ -72,6 +73,11 @@ class ClickApp:
         self.selected_image_files = []
         self.hotkey_labels = {}
         self.hotkey_entries = {}
+
+        self.preview_window = None
+        self.last_hovered_index = -1
+        self.hovered_listbox = None
+
         self.setup_ui()
         self.update_available_images_listbox()
         self.register_hotkeys()
@@ -87,6 +93,8 @@ class ClickApp:
         self.available_listbox = tk.Listbox(
             available_frame, selectmode=tk.EXTENDED, exportselection=False
         )
+        self.available_listbox.bind("<Motion>", self._show_preview)
+        self.available_listbox.bind("<Leave>", self._hide_preview)
         self.available_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         available_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
@@ -104,6 +112,8 @@ class ClickApp:
         self.selected_listbox = tk.Listbox(
             selected_frame, selectmode=tk.EXTENDED, exportselection=False
         )
+        self.selected_listbox.bind("<Motion>", self._show_preview)
+        self.selected_listbox.bind("<Leave>", self._hide_preview)
         self.selected_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         selected_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
@@ -221,6 +231,49 @@ class ClickApp:
         for i in sorted(selected_indices, reverse=True):
             del self.selected_image_files[i]
         self.update_selected_images_listbox()
+
+    def _show_preview(self, event):
+        listbox = event.widget
+        index = listbox.nearest(event.y)
+
+        if index == self.last_hovered_index and listbox == self.hovered_listbox:
+            return
+
+        self._hide_preview()
+
+        if index < 0 or index >= listbox.size():
+            return
+
+        self.last_hovered_index = index
+        self.hovered_listbox = listbox
+
+        filename = listbox.get(index)
+        image_path = get_image_path(filename)
+
+        try:
+            img = Image.open(image_path)
+            img.thumbnail((200, 200))
+
+            self.preview_window = tk.Toplevel(self.root)
+            self.preview_window.overrideredirect(True)
+
+            x = self.root.winfo_x() + self.root.winfo_width() + 10
+            y = self.root.winfo_y() + PAD_LARGE
+            self.preview_window.geometry(f"+{x}+{y}")
+
+            photo = ImageTk.PhotoImage(img)
+            label = tk.Label(self.preview_window, image=photo)
+            label.image = photo
+            label.pack()
+        except Exception:
+            self._hide_preview()
+
+    def _hide_preview(self, event=None):
+        if self.preview_window:
+            self.preview_window.destroy()
+            self.preview_window = None
+        self.last_hovered_index = -1
+        self.hovered_listbox = None
 
     def add_image(self):
         file_path = filedialog.askopenfilename(filetypes=[("PNG images", "*.png")])
